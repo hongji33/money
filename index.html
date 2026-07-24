@@ -305,7 +305,7 @@ const schemas={
     {k:'name',label:'이름',type:'text',ph:'예: 김지연'},
     {k:'relation',label:'관계',type:'select',opts:['본인','배우자','자녀','부모','기타']},
     {k:'job',label:'직업',type:'text',ph:'예: 중학교 교사'},
-    {k:'age',label:'나이',type:'number',ph:'예: 42'},
+    {k:'birthDate',label:'생년월일',type:'date'},
     {k:'income',label:'월 소득(세후)',unit:'만원',type:'number',ph:'예: 380'},
   ]},
   assets:{title:'자산',fields:[
@@ -373,6 +373,14 @@ document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==
 /* ============ HELPERS ============ */
 function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
 const won=v=>Math.round(v).toLocaleString();
+function ageOf(m){
+  let now;try{now=new Date();}catch(e){now=new Date(2026,6,24);}
+  if(m.birthDate){const p=m.birthDate.split('-').map(Number),y=p[0],mo=p[1]||1,d=p[2]||1;
+    if(y){let a=now.getFullYear()-y;if((now.getMonth()+1)<mo||((now.getMonth()+1)===mo&&now.getDate()<d))a--;return (a>=0&&a<130)?a+'세':'-';}}
+  if(m.birthYear){const a=now.getFullYear()-(+m.birthYear);return (a>=0&&a<130)?a+'세':'-';}
+  if(m.age)return (+m.age)+'세';return '-';
+}
+function fmtBirth(m){if(m.birthDate){const p=m.birthDate.split('-');return `${p[0]}.${p[1]}.${p[2]}`;}if(m.birthYear)return m.birthYear+'년';return '-';}
 function eok(v){const e=Math.floor(v/10000);const man=Math.round(v%10000);return e>0?`${e}억 ${man.toLocaleString()}<small>만원</small>`:`${man.toLocaleString()}<small>만원</small>`;}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1900);}
 const PAL=['--s1','--s2','--s3','--s4','--s5','--s7','--s8','--s6'];
@@ -472,8 +480,9 @@ function renderFamily(){
   const grads=['linear-gradient(135deg,#eb6834,#e87ba4)','linear-gradient(135deg,#2a78d6,#4a3aa7)','linear-gradient(135deg,#1baf7a,#eda100)','linear-gradient(135deg,#e34948,#eb6834)'];
   g.innerHTML=DATA.members.map((m,i)=>`<div class="member">
     <div class="top-acts"><button class="iconbtn" onclick="openForm('members','${m.id}')">✏️</button><button class="iconbtn" onclick="delItem('members','${m.id}')">🗑️</button></div>
-    <div class="ph"><div class="ava" style="background:${grads[i%4]}">${(m.name||'?').slice(0,1)}</div><div><div class="nm">${m.name||'이름 없음'} <span style="font-size:12px;color:var(--ink-3)">· ${m.age||'-'}세</span></div><div class="role">${m.job||m.relation||''}</div></div></div>
+    <div class="ph"><div class="ava" style="background:${grads[i%4]}">${(m.name||'?').slice(0,1)}</div><div><div class="nm">${m.name||'이름 없음'} <span style="font-size:12px;color:var(--ink-3)">· ${ageOf(m)}</span></div><div class="role">${m.job||m.relation||''}</div></div></div>
     <div class="mrow"><span>관계</span><span>${m.relation||'-'}</span></div>
+    <div class="mrow"><span>생년월일</span><span>${fmtBirth(m)}</span></div>
     <div class="mrow"><span>월 소득</span><span>${m.income?won(m.income)+'만원':'-'}</span></div>
   </div>`).join('');
 }
@@ -541,9 +550,9 @@ function resetAll(){if(!confirm('정말 모든 데이터를 지울까요? 되돌
 function loadSample(){
   DATA={
     members:[
-      {id:'m1',name:'김지연',relation:'본인',job:'중학교 미술교사',age:42,income:382},
-      {id:'m2',name:'박준호',relation:'배우자',job:'IT 회사원',age:45,income:548},
-      {id:'m3',name:'박서연',relation:'자녀',job:'중학생',age:14,income:0},
+      {id:'m1',name:'김지연',relation:'본인',job:'중학교 미술교사',birthDate:'1984-03-15',income:382},
+      {id:'m2',name:'박준호',relation:'배우자',job:'IT 회사원',birthDate:'1981-08-22',income:548},
+      {id:'m3',name:'박서연',relation:'자녀',job:'중학생',birthDate:'2012-05-10',income:0},
     ],
     assets:[
       {id:'a1',category:'부동산',name:'우리집 아파트',amount:65000},
