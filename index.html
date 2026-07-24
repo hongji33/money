@@ -46,6 +46,10 @@ input,select{font-family:inherit}
 .themebtn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font-size:13px;font-weight:600;color:var(--ink-2)}
 .themebtn:hover{background:var(--surface-2)}
 .save-note{font-size:11px;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);padding:8px 11px;border-radius:10px;text-align:center;font-weight:600;line-height:1.4}
+.hamburger{display:none;width:40px;height:40px;flex-shrink:0;border-radius:11px;font-size:20px;color:var(--ink-2);border:1px solid var(--line);place-items:center;background:var(--surface)}
+.hamburger:hover{background:var(--surface-2)}
+.backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:50}
+.backdrop.show{display:block}
 /* main */
 .main{flex:1;min-width:0}
 .topbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--page) 82%,transparent);backdrop-filter:saturate(180%) blur(12px);border-bottom:1px solid var(--line);padding:15px 30px;display:flex;align-items:center;justify-content:space-between;gap:16px}
@@ -151,10 +155,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--page);padding:12px 20px;border-radius:12px;font-size:13.5px;font-weight:700;opacity:0;transition:.25s;z-index:200;box-shadow:0 10px 30px rgba(0,0,0,.3)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 @media(max-width:1080px){.kpis{grid-template-columns:repeat(2,1fr)}.members{grid-template-columns:1fr}.sim-grid,.two{grid-template-columns:1fr}}
-@media(max-width:720px){.sidebar{display:none}.content,.topbar{padding-left:16px;padding-right:16px}}
+@media(max-width:720px){.sidebar{position:fixed;left:0;top:0;z-index:60;transform:translateX(-100%);transition:transform .25s ease;box-shadow:0 12px 44px rgba(0,0,0,.28)}.sidebar.open{transform:translateX(0)}.hamburger{display:grid}.content{padding-left:16px;padding-right:16px}.topbar{padding:12px 16px}}
 </style>
 </head>
 <body>
+<div class="backdrop" id="navBackdrop"></div>
 <div class="app">
   <aside class="sidebar">
     <div class="brand"><div class="logo">F</div><div><div class="t">Family CFO</div><div class="s">우리 가족 재무비서</div></div></div>
@@ -174,9 +179,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
 
   <div class="main">
     <div class="topbar">
-      <div><h1 id="viewTitle">대시보드</h1><div class="sub" id="viewSub">우리 가족 재무 현황 한눈에 보기</div></div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn ghost sm" id="quickSample">예시 채우기</button>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="hamburger" id="hamburger" aria-label="메뉴 열기">☰</button>
+        <div><h1 id="viewTitle">대시보드</h1><div class="sub" id="viewSub">우리 가족 재무 현황 한눈에 보기</div></div>
       </div>
     </div>
     <div class="content">
@@ -256,10 +261,34 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
           <div style="border-top:1px solid var(--line);margin-top:18px;padding-top:16px">
             <p class="hint">아래는 되돌릴 수 없어요. 조심해서 사용하세요.</p>
             <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
-              <button class="btn ghost sm" onclick="loadSample()">🧪 예시 데이터 채우기</button>
               <button class="btn danger sm" onclick="resetAll()">🗑️ 전체 지우기</button>
             </div>
           </div>
+        </div>
+      </div>
+      <div class="card mt16">
+        <h3>☁️ 클라우드 자동 동기화</h3>
+        <p class="hint mt16" style="margin-top:8px">컴퓨터·폰에서 <b>같은 이메일로 로그인</b>하면 입력한 내용이 자동으로 함께 유지돼요. 처음 한 번만 아래 설정을 해두면 됩니다.</p>
+        <div id="cloudStatus" style="margin-top:14px;font-weight:700;font-size:13.5px">⚪ 아직 연결 안 됨</div>
+        <details id="cloudCfgWrap" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+          <summary style="cursor:pointer;font-weight:700;font-size:13px;color:var(--ink-2)">🔧 1단계 · 연결 정보 붙여넣기</summary>
+          <p class="hint" style="margin-top:8px">파이어베이스에서 복사한 연결 정보(firebaseConfig 부분 전체)를 붙여넣고 저장하세요.</p>
+          <textarea id="fbCfgBox" rows="6" style="width:100%;border:1px solid var(--line-strong);background:var(--surface-2);border-radius:11px;padding:11px 13px;font-size:12.5px;color:var(--ink);outline:none;font-family:ui-monospace,monospace;resize:vertical;margin-top:8px" placeholder="const firebaseConfig = { apiKey: ... };  ← 이 부분 전체를 붙여넣으세요"></textarea>
+          <button class="btn sm" style="margin-top:10px" onclick="saveFbConfig()">연결 정보 저장</button>
+        </details>
+        <div id="cloudLogin" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;display:none">
+          <div style="font-weight:700;font-size:13px;color:var(--ink-2);margin-bottom:6px">🔑 2단계 · 로그인</div>
+          <p class="hint" style="margin-bottom:10px">컴퓨터와 폰에서 <b>똑같은</b> 이메일·비밀번호를 쓰세요. 처음 쓰는 이메일이면 ‘가입’을 먼저 누르세요.</p>
+          <div class="field"><label>이메일</label><input type="email" id="fbEmail" placeholder="예: ourfamily@gmail.com" autocomplete="username"></div>
+          <div class="field mt16"><label>비밀번호 <span class="unit">(6자 이상)</span></label><input type="password" id="fbPw" placeholder="비밀번호" autocomplete="current-password"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+            <button class="btn" onclick="fbLogin()">로그인</button>
+            <button class="btn ghost" onclick="fbSignup()">가입 (처음 한 번만)</button>
+          </div>
+        </div>
+        <div id="cloudLoggedIn" style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;display:none">
+          <p class="hint" style="margin-bottom:10px">이제 다른 기기에서도 <b id="cloudEmailShow"></b> 로 로그인하면 같은 내용이 보여요.</p>
+          <button class="btn ghost sm" onclick="fbLogout()">로그아웃</button>
         </div>
       </div>
       <div class="card mt16" id="storageWarn" style="display:none;border-color:var(--warn)">
@@ -296,6 +325,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
 /* ============ STORAGE ============ */
 const KEY='familyCFO_v1';
@@ -306,9 +338,100 @@ function load(){
   try{const s=localStorage.getItem(KEY);if(s)DATA=Object.assign(blankData(),JSON.parse(s));}
   catch(e){canSave=false;}
 }
-function save(){try{localStorage.setItem(KEY,JSON.stringify(DATA));}catch(e){canSave=false;}}
+function save(){DATA._ts=Date.now();try{localStorage.setItem(KEY,JSON.stringify(DATA));}catch(e){canSave=false;}scheduleCloudSave();}
 try{localStorage.setItem('__t','1');localStorage.removeItem('__t');}catch(e){canSave=false;}
 load();
+
+/* ============ CLOUD SYNC (Firebase) ============ */
+const FBKEY='familyCFO_fbcfg';
+let fbApp=null,fbAuth=null,fbDb=null,fbUser=null,fbUnsub=null,cloudTimer=null,fbReady=false;
+function grab(t,k){const m=t.match(new RegExp('["\']?'+k+'["\']?\\s*:\\s*["\']([^"\']+)["\']'));return m?m[1]:'';}
+function parseFbConfig(text){
+  text=(text||'').trim();if(!text)return null;
+  const cfg={apiKey:grab(text,'apiKey'),authDomain:grab(text,'authDomain'),projectId:grab(text,'projectId'),storageBucket:grab(text,'storageBucket'),messagingSenderId:grab(text,'messagingSenderId'),appId:grab(text,'appId')};
+  if(!cfg.apiKey||!cfg.projectId||!cfg.appId)return null;
+  Object.keys(cfg).forEach(k=>{if(!cfg[k])delete cfg[k];});
+  return cfg;
+}
+function saveFbConfig(){
+  const cfg=parseFbConfig(document.getElementById('fbCfgBox').value);
+  if(!cfg){toast('연결 정보를 인식하지 못했어요. 전체를 그대로 붙여넣어 주세요');return;}
+  localStorage.setItem(FBKEY,JSON.stringify(cfg));
+  if(fbApp){toast('저장했어요. 화면을 새로고침(F5)해 주세요');return;}
+  toast('연결 정보를 저장했어요 ✓');initFirebase();
+}
+function initFirebase(){
+  const raw=localStorage.getItem(FBKEY);
+  if(!raw){fbReady=false;updateCloudUI();return;}
+  if(typeof firebase==='undefined'){toast('인터넷 연결을 확인해 주세요');return;}
+  let cfg;try{cfg=JSON.parse(raw);}catch(e){return;}
+  try{
+    if(!fbApp)fbApp=firebase.initializeApp(cfg);
+    fbAuth=firebase.auth();fbDb=firebase.firestore();fbReady=true;
+    fbAuth.onAuthStateChanged(u=>{fbUser=u;if(u)startCloudListen();else stopCloudListen();updateCloudUI();});
+  }catch(e){fbReady=false;}
+  updateCloudUI();
+}
+function stopCloudListen(){if(fbUnsub){fbUnsub();fbUnsub=null;}}
+function startCloudListen(){
+  if(!fbUser||!fbDb)return;stopCloudListen();
+  const ref=fbDb.collection('familyCFO').doc(fbUser.uid);
+  fbUnsub=ref.onSnapshot(snap=>{
+    if(!snap.exists){cloudSaveNow();return;}
+    const rd=snap.data();if(!rd||!rd.data)return;
+    const remote=rd.data;
+    if((remote._ts||0)>(DATA._ts||0)){
+      DATA=Object.assign(blankData(),remote);
+      try{localStorage.setItem(KEY,JSON.stringify(DATA));}catch(e){}
+      renderAll();toast('다른 기기의 최신 내용을 불러왔어요 ✓');
+    }
+    updateCloudUI();
+  },err=>{updateCloudUI();});
+}
+function cloudSaveNow(){
+  if(!fbUser||!fbDb)return;
+  if(!DATA._ts)DATA._ts=Date.now();
+  fbDb.collection('familyCFO').doc(fbUser.uid).set({data:DATA}).catch(e=>{});
+}
+function scheduleCloudSave(){if(!fbUser||!fbDb)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(cloudSaveNow,900);}
+function fbErr(e){
+  const c=e&&e.code||'';
+  if(c==='auth/invalid-email')return '이메일 형식이 올바르지 않아요';
+  if(c==='auth/weak-password')return '비밀번호는 6자 이상이어야 해요';
+  if(c==='auth/email-already-in-use')return '이미 가입된 이메일이에요. ‘로그인’을 눌러 주세요';
+  if(c==='auth/user-not-found'||c==='auth/wrong-password'||c==='auth/invalid-credential')return '이메일 또는 비밀번호가 맞지 않아요';
+  if(c==='auth/network-request-failed')return '인터넷 연결을 확인해 주세요';
+  return '오류가 발생했어요 ('+c+')';
+}
+function fbCreds(){const em=(document.getElementById('fbEmail').value||'').trim(),pw=document.getElementById('fbPw').value||'';return{em,pw};}
+function fbLogin(){
+  if(!fbReady){toast('먼저 연결 정보를 붙여넣고 저장해 주세요');return;}
+  const{em,pw}=fbCreds();if(!em||!pw){toast('이메일과 비밀번호를 입력해 주세요');return;}
+  fbAuth.signInWithEmailAndPassword(em,pw).then(()=>toast('로그인됐어요 ✓')).catch(e=>toast(fbErr(e)));
+}
+function fbSignup(){
+  if(!fbReady){toast('먼저 연결 정보를 붙여넣고 저장해 주세요');return;}
+  const{em,pw}=fbCreds();if(!em||!pw){toast('이메일과 비밀번호를 입력해 주세요');return;}
+  fbAuth.createUserWithEmailAndPassword(em,pw).then(()=>toast('가입하고 로그인했어요 ✓')).catch(e=>toast(fbErr(e)));
+}
+function fbLogout(){if(fbAuth)fbAuth.signOut().then(()=>toast('로그아웃했어요'));}
+function updateCloudUI(){
+  const st=document.getElementById('cloudStatus');if(!st)return;
+  const hasCfg=!!localStorage.getItem(FBKEY);
+  const login=document.getElementById('cloudLogin'),li=document.getElementById('cloudLoggedIn'),cfgWrap=document.getElementById('cloudCfgWrap');
+  if(fbUser){
+    st.innerHTML='🟢 로그인됨 — <span style="color:var(--ink-2)">'+(fbUser.email||'')+'</span> · 자동 동기화 켜짐';st.style.color='var(--good)';
+    login.style.display='none';li.style.display='block';if(cfgWrap)cfgWrap.open=false;
+    const em=document.getElementById('cloudEmailShow');if(em)em.textContent=fbUser.email||'';
+  }else if(hasCfg){
+    st.innerHTML='🟡 연결됨 · 로그인하면 동기화가 시작돼요';st.style.color='var(--warn)';
+    login.style.display='block';li.style.display='none';
+  }else{
+    st.innerHTML='⚪ 아직 연결 안 됨 · 아래 ‘연결 정보 붙여넣기’부터 해주세요';st.style.color='var(--ink-3)';
+    login.style.display='none';li.style.display='none';if(cfgWrap)cfgWrap.open=true;
+  }
+}
+initFirebase();
 
 /* ============ SCHEMAS ============ */
 const CATS=['부동산','예금·적금','투자','연금','자동차','현금','기타'];
@@ -478,7 +601,7 @@ function renderDash(){
   lineChart(document.getElementById('netTrend'),pts);
   // AI summary
   let msg;
-  if(!DATA.assets.length&&!DATA.members.length){msg='왼쪽 메뉴의 <b>가족</b>과 <b>자산·부채</b>에 우리 집 정보를 입력해 보세요. 입력하는 순간 이 대시보드가 살아납니다! 처음엔 위쪽 <b>예시 채우기</b> 버튼으로 구경해봐도 좋아요. 😊';}
+  if(!DATA.assets.length&&!DATA.members.length){msg='메뉴에서 <b>가족</b>과 <b>자산·부채</b>에 우리 집 정보를 입력해 보세요. 입력하는 순간 이 대시보드가 살아납니다! 😊';}
   else{const nw2=netWorth(),inc=hhIncome(),exp=+DATA.settings.expense||0,div=yearDividend();
     msg=`현재 우리 가족 순자산은 <b>${(nw2/10000).toFixed(1)}억원</b>이에요. `;
     if(inc&&exp){const rate=Math.round(exp/inc*100);msg+=`가구 소득 대비 지출률은 <b>${rate}%</b>${rate<70?'로 건강한 편이에요. ':'예요. 지출을 조금 줄이면 저축 여력이 커져요. '}`;}
@@ -544,7 +667,7 @@ function drawSim(){
   drawSim();}));
 document.getElementById('tReinvest').addEventListener('click',function(){this.classList.toggle('on');drawSim();});
 
-function renderAll(){renderDash();renderFamily();renderAssets();renderInvest();renderInsure();drawSim();document.getElementById('setExpense').value=DATA.settings.expense||'';}
+function renderAll(){renderDash();renderFamily();renderAssets();renderInvest();renderInsure();drawSim();document.getElementById('setExpense').value=DATA.settings.expense||'';try{updateCloudUI();}catch(e){}}
 
 /* ============ SETTINGS / BACKUP ============ */
 function saveExpense(){DATA.settings.expense=parseFloat(document.getElementById('setExpense').value)||0;save();renderAll();toast('저장했어요 ✓');}
@@ -624,14 +747,18 @@ function loadSample(){
   };
   save();renderAll();toast('예시 데이터를 채웠어요 ✓');
 }
-document.getElementById('quickSample').addEventListener('click',loadSample);
 
 /* ============ NAV / THEME ============ */
 const titles={dash:['대시보드','우리 가족 재무 현황 한눈에 보기'],family:['가족','구성원별 소득·정보 관리'],assets:['자산·부채','가진 것과 갚을 것을 함께'],invest:['투자','포트폴리오와 배당 관리'],insure:['보험','가족 보험 정리'],future:['미래 시뮬레이션','조건을 바꿔 미래를 설계'],settings:['설정·백업','기본 설정과 데이터 보관']};
 document.getElementById('nav').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
   document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
   const v=b.dataset.v;document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));document.getElementById('view-'+v).classList.add('active');
-  document.getElementById('viewTitle').textContent=titles[v][0];document.getElementById('viewSub').textContent=titles[v][1];window.scrollTo({top:0,behavior:'smooth'});});
+  document.getElementById('viewTitle').textContent=titles[v][0];document.getElementById('viewSub').textContent=titles[v][1];closeNav();window.scrollTo({top:0,behavior:'smooth'});});
+const _sb=document.querySelector('.sidebar'),_bd=document.getElementById('navBackdrop');
+function openNav(){_sb.classList.add('open');_bd.classList.add('show');}
+function closeNav(){_sb.classList.remove('open');_bd.classList.remove('show');}
+document.getElementById('hamburger').addEventListener('click',openNav);
+_bd.addEventListener('click',closeNav);
 document.getElementById('themeToggle').addEventListener('click',()=>{const d=document.documentElement.getAttribute('data-theme')==='dark';document.documentElement.setAttribute('data-theme',d?'light':'dark');document.getElementById('themeIc').textContent=d?'🌙':'☀️';document.getElementById('themeTxt').textContent=d?'다크 모드':'라이트 모드';renderAll();});
 
 /* ============ INIT ============ */
