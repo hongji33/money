@@ -210,7 +210,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
       <div class="grid kpis" style="grid-template-columns:repeat(3,1fr)" id="investKpi"></div>
       <div class="grid two mt16">
         <div class="card"><h3>📊 종목별 비중</h3><div id="investDonut" style="display:flex;justify-content:center;margin:8px 0"></div><div class="legend" id="investLegend"></div></div>
-        <div class="card"><div class="hd-row"><h3>💼 보유 종목</h3><button class="btn sm" onclick="openForm('investments')">＋ 종목 추가</button></div><div class="rows" id="investRows"></div></div>
+        <div class="card"><div class="hd-row"><h3>💼 보유 종목</h3><div style="display:flex;gap:8px"><button class="btn ghost sm" onclick="openPaste()">📋 붙여넣기로 추가</button><button class="btn sm" onclick="openForm('investments')">＋ 종목 추가</button></div></div><div class="rows" id="investRows"></div></div>
       </div>
     </section>
 
@@ -273,6 +273,19 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
 </div>
 <div class="chart-tip" id="tip"></div>
 <div class="toast" id="toast"></div>
+
+<!-- Paste Modal -->
+<div class="overlay" id="pasteOverlay">
+  <div class="modal">
+    <div class="mh">📋 붙여넣기로 종목 추가</div>
+    <div class="mb">
+      <p class="hint" style="margin-bottom:10px;line-height:1.55">증권사 앱을 캡처해서 <b>클로드(AI) 채팅에 올리고</b> "종목 정리해줘"라고 하세요. AI가 아래 형식으로 정리해 주면, 그대로 복사해 여기에 붙여넣으세요. 기존 종목은 지워지지 않고 <b>추가</b>돼요.</p>
+      <div style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:11.5px;color:var(--ink-3);margin-bottom:12px;line-height:1.6">한 줄에 하나씩, 이렇게:<br><b style="color:var(--ink-2)">종목명 | 구분 | 평가금액 | 수익률 | 연배당</b><br>예) S&P500 ETF | 미국 | 2650 | 21.4 | 52</div>
+      <div class="field"><textarea id="pasteBox" rows="6" style="width:100%;border:1px solid var(--line-strong);background:var(--surface-2);border-radius:11px;padding:11px 13px;font-size:13.5px;color:var(--ink);outline:none;font-family:inherit;resize:vertical" placeholder="여기에 붙여넣으세요"></textarea></div>
+    </div>
+    <div class="mf"><button class="btn ghost" onclick="closePaste()">취소</button><button class="btn" onclick="confirmPaste()">추가하기</button></div>
+  </div>
+</div>
 
 <!-- Modal -->
 <div class="overlay" id="overlay">
@@ -545,6 +558,34 @@ document.getElementById('importFile').addEventListener('change',e=>{
   r.readAsText(f);e.target.value='';
 });
 function resetAll(){if(!confirm('정말 모든 데이터를 지울까요? 되돌릴 수 없어요.'))return;DATA=blankData();save();renderAll();toast('전체를 지웠어요');}
+
+/* ============ PASTE-TO-ADD (AI 정리 결과 붙여넣기) ============ */
+function openPaste(){document.getElementById('pasteBox').value='';document.getElementById('pasteOverlay').classList.add('open');setTimeout(()=>document.getElementById('pasteBox').focus(),60);}
+function closePaste(){document.getElementById('pasteOverlay').classList.remove('open');}
+document.getElementById('pasteOverlay').addEventListener('click',e=>{if(e.target.id==='pasteOverlay')closePaste();});
+function normRegion(s){s=(s||'').toString();if(/미국|해외|us|나스닥|s&p|달러/i.test(s))return '미국';if(/국내|한국|코스|kr|원화/i.test(s))return '국내';if(['미국','국내','기타'].includes(s))return s;return '기타';}
+function num(s){if(s==null)return 0;const m=(s.toString().replace(/,/g,'').match(/-?\d+(\.\d+)?/));return m?parseFloat(m[0]):0;}
+function parseHoldings(text){
+  text=(text||'').trim();if(!text)return [];
+  // 1) JSON 배열 시도
+  try{const j=JSON.parse(text);if(Array.isArray(j))return j.map(o=>({id:'i'+Date.now()+Math.floor(Math.random()*9999),name:(o.name||o.종목명||'').toString().trim(),region:normRegion(o.region||o.구분),amount:num(o.amount||o.평가금액||o.금액),ret:num(o.ret||o.수익률),dividend:num(o.dividend||o.배당||o.연배당)})).filter(x=>x.name);}catch(e){}
+  // 2) 줄 단위(구분자 | , 탭)
+  const out=[];
+  text.split(/\r?\n/).forEach(line=>{
+    line=line.trim();if(!line)return;
+    if(/종목명|구분|평가금액|수익률|배당/.test(line)&&/\|/.test(line)&&!/\d/.test(line))return; // 헤더 줄 건너뜀
+    const p=line.split(/\s*[|\t]\s*/).map(s=>s.trim());
+    if(p.length<2)return;
+    const name=p[0];if(!name)return;
+    out.push({id:'i'+Date.now()+Math.floor(Math.random()*9999),name,region:normRegion(p[1]),amount:num(p[2]),ret:num(p[3]),dividend:num(p[4])});
+  });
+  return out;
+}
+function confirmPaste(){
+  const items=parseHoldings(document.getElementById('pasteBox').value);
+  if(!items.length){toast('내용을 인식하지 못했어요. 형식을 확인해 주세요');return;}
+  DATA.investments.push(...items);save();closePaste();renderAll();toast(items.length+'개 종목을 추가했어요 ✓');
+}
 
 /* ============ SAMPLE ============ */
 function loadSample(){
