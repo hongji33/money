@@ -165,7 +165,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--page);padding:12px 20px;border-radius:12px;font-size:13.5px;font-weight:700;opacity:0;transition:.25s;z-index:200;box-shadow:0 10px 30px rgba(0,0,0,.3)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 @media(max-width:1080px){.kpis{grid-template-columns:repeat(2,1fr)}.members{grid-template-columns:1fr}.sim-grid,.two{grid-template-columns:1fr}}
-@media(max-width:720px){.sidebar{position:fixed;left:0;top:0;z-index:60;transform:translateX(-100%);transition:transform .25s ease;box-shadow:0 12px 44px rgba(0,0,0,.28)}.sidebar.open{transform:translateX(0)}.hamburger{display:grid}.content{padding-left:16px;padding-right:16px}.topbar{padding:12px 16px}}
+@media(max-width:720px){.sidebar{position:fixed;left:0;top:0;z-index:60;transform:translateX(-100%);transition:transform .25s ease;box-shadow:0 12px 44px rgba(0,0,0,.28)}.sidebar.open{transform:translateX(0)}.hamburger{display:grid}.content{padding-left:16px;padding-right:16px}.topbar{padding:12px 16px}.kpis{grid-template-columns:repeat(2,1fr)!important}}
 </style>
 </head>
 <body>
@@ -189,6 +189,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
       <button data-v="assets"><span class="ic">🏦</span> 자산·부채</button>
       <button data-v="invest"><span class="ic">📈</span> 투자</button>
       <button data-v="insure"><span class="ic">🛡️</span> 보험</button>
+      <button data-v="expense"><span class="ic">💳</span> 월 지출</button>
       <button data-v="future"><span class="ic">🔮</span> 미래 시뮬레이션</button>
       <button data-v="settings"><span class="ic">⚙️</span> 설정·백업</button>
     </div>
@@ -246,6 +247,31 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
     </section>
 
     <!-- FUTURE -->
+    <!-- EXPENSE (월 지출) -->
+    <section class="view" id="view-expense">
+      <div class="card" style="margin-bottom:16px">
+        <h3>📥 카드·은행 내역 올리기</h3>
+        <p class="hint mt16" style="margin-top:8px">카드사·은행에서 내려받은 <b>이용내역 엑셀(.xlsx)</b> 또는 <b>CSV</b> 파일을 올리면, 날짜·가맹점·금액을 자동으로 읽어 분류해요.</p>
+        <div style="margin-top:14px"><button class="btn" onclick="document.getElementById('expenseFile').click()">📄 파일 선택</button>
+          <input type="file" id="expenseFile" accept=".xlsx,.xls,.csv" style="display:none"></div>
+        <div id="expenseParseMsg" class="hint" style="margin-top:10px"></div>
+      </div>
+      <div class="card" id="expenseReview" style="display:none;margin-bottom:16px">
+        <div class="hd-row"><h3>✅ 확인 후 저장</h3><span class="hint" id="expenseReviewSum"></span></div>
+        <p class="hint" style="margin-top:6px">분류가 틀린 항목은 오른쪽에서 바꿀 수 있어요.</p>
+        <div id="expenseReviewRows" style="max-height:340px;overflow:auto;margin-top:8px"></div>
+        <div style="display:flex;gap:10px;margin-top:14px"><button class="btn" onclick="saveParsedExpenses()">이 내역 저장</button><button class="btn ghost" onclick="cancelParsedExpenses()">취소</button></div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="hd-row"><h3>📅 월별 지출</h3><select id="expenseMonth" onchange="renderExpense()" style="border:1px solid var(--line-strong);background:var(--surface-2);border-radius:10px;padding:7px 10px;font-size:13px;color:var(--ink);font-weight:600"></select></div>
+        <div class="grid kpis" style="grid-template-columns:repeat(3,1fr);margin-top:12px" id="expenseKpi"></div>
+      </div>
+      <div class="grid two">
+        <div class="card"><h3>📊 카테고리별</h3><div id="expenseBars" style="margin-top:10px"></div></div>
+        <div class="card"><h3>🧾 지출 목록</h3><div id="expenseList" style="max-height:460px;overflow:auto;margin-top:8px"></div></div>
+      </div>
+    </section>
+
     <section class="view" id="view-future">
       <div class="card" style="margin-bottom:16px"><div class="ai-head"><div class="ai-orb">🔮</div><h3 style="color:var(--ink)">미래 시뮬레이션 · "What if?"</h3></div><p class="hint">지금 입력하신 순자산에서 출발해, 조건을 바꾸면 미래가 어떻게 달라지는지 계산해요.</p></div>
       <div class="grid sim-grid">
@@ -348,11 +374,12 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 /* ============ STORAGE ============ */
 const KEY='familyCFO_v1';
 let canSave=true;
-function blankData(){return {members:[],assets:[],debts:[],investments:[],insurances:[],settings:{expense:0}};}
+function blankData(){return {members:[],assets:[],debts:[],investments:[],insurances:[],expenses:[],expenseRules:{},settings:{expense:0}};}
 let DATA=blankData();
 function load(){
   try{const s=localStorage.getItem(KEY);if(s)DATA=Object.assign(blankData(),JSON.parse(s));}
@@ -688,10 +715,93 @@ function drawSim(){
   drawSim();}));
 document.getElementById('tReinvest').addEventListener('click',function(){this.classList.toggle('on');drawSim();});
 
-function renderAll(){renderDash();renderFamily();renderAssets();renderInvest();renderInsure();drawSim();document.getElementById('setExpense').value=DATA.settings.expense||'';try{updateCloudUI();}catch(e){}}
+function renderAll(){renderDash();renderFamily();renderAssets();renderInvest();renderInsure();drawSim();document.getElementById('setExpense').value=DATA.settings.expense||'';try{renderExpense();}catch(e){}try{updateCloudUI();}catch(e){}}
 
 /* ============ SETTINGS / BACKUP ============ */
 function saveExpense(){DATA.settings.expense=parseFloat(document.getElementById('setExpense').value)||0;save();renderAll();toast('저장했어요 ✓');}
+
+/* ================= 월 지출 가계부 ================= */
+const ECATS=['식비','카페·간식','편의점','마트·생필품','온라인쇼핑','교통','의료·건강','통신','공과금·관리비','문화·여가','교육','경조사','미용','기타'];
+const ECAT_ICON={'식비':'🍚','카페·간식':'☕','편의점':'🏪','마트·생필품':'🛒','온라인쇼핑':'📦','교통':'🚌','의료·건강':'🏥','통신':'📱','공과금·관리비':'🧾','문화·여가':'🎬','교육':'📚','경조사':'🎁','미용':'💇','기타':'🔖'};
+const ECAT_RULES=[
+  [/스타벅스|투썸|이디야|메가|빽다방|커피|카페|공차|컴포즈|할리스|폴바셋|파스쿠찌|배스킨|던킨|파리바게|뚜레쥬르|베이커리/i,'카페·간식'],
+  [/GS25|CU|세븐일레븐|이마트24|미니스톱|편의점/i,'편의점'],
+  [/이마트|홈플러스|롯데마트|코스트코|하나로|메가마트|킴스클럽|마트|슈퍼/i,'마트·생필품'],
+  [/쿠팡|11번가|G마켓|지마켓|옥션|위메프|티몬|무신사|올리브영|다이소|알리|테무|SSG|네이버페이|스마트스토어|인터파크/i,'온라인쇼핑'],
+  [/배달의민족|배민|요기요|쿠팡이츠|맥도날드|버거킹|롯데리아|맘스터치|KFC|치킨|피자|김밥|분식|국밥|식당|한식|중식|일식|양식|본죽|김가네|BBQ|BHC|교촌|도미노|설렁탕|칼국수|족발|곱창|고기|횟집|초밥|우동|라멘|떡볶이|푸드/i,'식비'],
+  [/지하철|버스|택시|카카오T|티머니|하이패스|주유|칼텍스|SK에너지|S-OIL|현대오일|철도|KTX|코레일|SRT|주차|톨게이트|고속도로|교통/i,'교통'],
+  [/병원|의원|약국|치과|한의원|피부과|정형외과|내과|안과|이비인후과|클리닉|의료/i,'의료·건강'],
+  [/SKT|KT|LG유플|LGU|유플러스|알뜰폰|헬로|통신|인터넷요금/i,'통신'],
+  [/전기|한국전력|한전|도시가스|가스공사|수도|상수도|관리비|아파트관리|공과/i,'공과금·관리비'],
+  [/CGV|롯데시네마|메가박스|넷플릭스|유튜브|스포티파이|왓챠|티빙|웨이브|디즈니|헬스|피트니스|필라테스|요가|골프|스크린|노래방|PC방|볼링|웹툰/i,'문화·여가'],
+  [/학원|교습|과외|서점|교보문고|영풍문고|YES24|알라딘|문구|학습지|에듀|튜터|도서/i,'교육'],
+  [/미용실|헤어|네일|피부관리|왁싱|바버|뷰티|살롱/i,'미용'],
+  [/축의|조의|화환|경조|웨딩|장례|부의/i,'경조사'],
+];
+function xesc(s){return (s||'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function categorize(desc){desc=(desc||'').toString();const r=DATA.expenseRules||{};for(const k in r){if(k&&desc.includes(k))return r[k];}for(const [re,c] of ECAT_RULES){if(re.test(desc))return c;}return '기타';}
+function eFmtDate(y,mo,d){const mm=('0'+mo).slice(-2),dd=('0'+d).slice(-2);return {date:y+'-'+mm+'-'+dd,month:y+'-'+mm};}
+function parseDate(v){v=(v||'').toString().trim();if(!v)return null;let m=v.match(/(20\d{2})[.\-\/년\s]+(\d{1,2})[.\-\/월\s]+(\d{1,2})/);if(m){const mo=+m[2],d=+m[3];if(mo>=1&&mo<=12&&d>=1&&d<=31)return eFmtDate(+m[1],mo,d);}m=v.match(/^(20\d{2})(\d{2})(\d{2})$/);if(m){const mo=+m[2],d=+m[3];if(mo>=1&&mo<=12&&d>=1&&d<=31)return eFmtDate(+m[1],mo,d);}m=v.match(/^(\d{1,2})[.\-\/](\d{1,2})$/);if(m){const mo=+m[1],d=+m[2];if(mo>=1&&mo<=12&&d>=1&&d<=31)return eFmtDate((new Date()).getFullYear(),mo,d);}return null;}
+function parseAmt(v){v=(v||'').toString().replace(/[^0-9.\-]/g,'');if(!v||v==='-')return 0;const n=Math.round(parseFloat(v));return isNaN(n)?0:n;}
+function buildTx(dRaw,nRaw,aRaw){const dt=parseDate(dRaw);if(!dt)return null;const amt=parseAmt(aRaw);if(!amt)return null;let desc=(nRaw||'').toString().trim().replace(/\s+/g,' ')||'(내용없음)';if(/합\s*계|총\s*계|소\s*계|누\s*계|국내이용|해외이용/.test(desc))return null;return {id:'e'+Date.now()+Math.floor(Math.random()*1e6),date:dt.date,month:dt.month,desc,amount:amt,category:categorize(desc)};}
+function extractTx(rows){
+  if(!rows||!rows.length)return [];
+  const dateRe=/(날짜|일자|거래일|이용일|승인일|매출일|사용일|거래일시|이용일시)/;
+  const descRe=/(가맹점|내용|적요|상호|이용내역|거래내용|가맹점명|사용처|비고|내역)/;
+  const amtRe=/(금액|이용금액|승인금액|출금|출금액|사용금액|결제금액|매출액|지출|거래금액|청구금액)/;
+  let hIdx=-1,dCol=-1,nCol=-1,aCol=-1;
+  for(let i=0;i<Math.min(rows.length,25);i++){const row=(rows[i]||[]).map(c=>(c==null?'':c.toString()));let d=-1,n=-1,a=-1;row.forEach((c,j)=>{if(d<0&&dateRe.test(c))d=j;if(n<0&&descRe.test(c))n=j;if(a<0&&amtRe.test(c))a=j;});if(d>=0&&a>=0){hIdx=i;dCol=d;nCol=n;aCol=a;break;}}
+  const out=[];
+  if(hIdx>=0){for(let i=hIdx+1;i<rows.length;i++){const row=(rows[i]||[]).map(c=>(c==null?'':c.toString()));const t=buildTx(row[dCol],nCol>=0?row[nCol]:'',row[aCol]);if(t)out.push(t);}}
+  if(!out.length){
+    const cols=Math.max(...rows.map(r=>(r||[]).length));const sd=[],sa=[],st=[];
+    for(let j=0;j<cols;j++){let dc=0,ac=0,tc=0;rows.forEach(r=>{const v=((r||[])[j]==null?'':r[j].toString()).trim();if(!v)return;if(parseDate(v))dc++;else if(/^[-\d,\.\s원]+$/.test(v)&&/\d/.test(v))ac++;else tc++;});sd[j]=dc;sa[j]=ac;st[j]=tc;}
+    const dCol2=sd.indexOf(Math.max(...sd));let aCol2=-1,bv=-1;for(let j=0;j<cols;j++){if(j===dCol2)continue;if(sa[j]>bv){bv=sa[j];aCol2=j;}}let nCol2=-1,bt=-1;for(let j=0;j<cols;j++){if(j===dCol2||j===aCol2)continue;if(st[j]>bt){bt=st[j];nCol2=j;}}
+    if(dCol2>=0&&aCol2>=0&&Math.max(...sd)>0){for(let i=0;i<rows.length;i++){const row=(rows[i]||[]).map(c=>(c==null?'':c.toString()));const t=buildTx(row[dCol2],nCol2>=0?row[nCol2]:'',row[aCol2]);if(t)out.push(t);}}
+  }
+  if(out.length){const neg=out.filter(t=>t.amount<0).length;if(neg>out.length/2)out.forEach(t=>t.amount=-t.amount);}
+  return out.filter(t=>t.amount!==0);
+}
+function decodeCsv(buf){const bytes=new Uint8Array(buf);try{const u=new TextDecoder('utf-8',{fatal:false}).decode(bytes);if(!/�/.test(u))return u;}catch(e){}try{return new TextDecoder('euc-kr').decode(bytes);}catch(e){}return new TextDecoder().decode(bytes);}
+let PARSED=null;
+function handleExpenseFile(file){
+  const msg=document.getElementById('expenseParseMsg');msg.textContent='읽는 중…';
+  if(typeof XLSX==='undefined'){msg.textContent='엑셀 기능을 불러오지 못했어요. 인터넷 연결을 확인하고 새로고침해 주세요.';return;}
+  const r=new FileReader();
+  r.onload=e=>{try{let wb;if(/\.csv$/i.test(file.name))wb=XLSX.read(decodeCsv(e.target.result),{type:'string'});else wb=XLSX.read(e.target.result,{type:'array'});const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});const tx=extractTx(rows);if(!tx.length){msg.innerHTML='내역을 자동으로 찾지 못했어요. 파일을 확인하시거나, 그 파일(또는 캡처)을 저에게 보내주시면 정리해 드릴게요.';return;}PARSED=tx;msg.textContent='';showReview(tx);}catch(err){msg.textContent='파일을 읽지 못했어요. 엑셀(.xlsx)이나 CSV 파일인지 확인해 주세요.';}};
+  r.readAsArrayBuffer(file);
+}
+function expRowHtml(t,idx,ctx){
+  const opts=ECATS.map(c=>`<option value="${c}"${c===t.category?' selected':''}>${ECAT_ICON[c]||''} ${c}</option>`).join('');
+  const onch=ctx==='review'?`chgReviewCat(${idx},this.value)`:`chgSavedCat('${t.id}',this.value)`;
+  const del=ctx==='saved'?`<button onclick="delExpense('${t.id}')" title="삭제" style="background:none;color:var(--ink-3);padding:2px 4px;font-size:14px">🗑️</button>`:'';
+  return `<div style="display:flex;align-items:center;gap:9px;padding:9px 2px;border-bottom:1px solid var(--line)"><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${xesc(t.desc)}</div><div style="font-size:11px;color:var(--ink-3)">${t.date}</div></div><select onchange="${onch}" style="border:1px solid var(--line);background:var(--surface-2);border-radius:8px;padding:5px 4px;font-size:11px;color:var(--ink);max-width:112px">${opts}</select><div style="font-weight:700;font-size:13px;white-space:nowrap">${t.amount.toLocaleString()}원</div>${del}</div>`;
+}
+function showReview(tx){const card=document.getElementById('expenseReview');card.style.display='block';const total=tx.reduce((s,t)=>s+t.amount,0);const months=[...new Set(tx.map(t=>t.month))];document.getElementById('expenseReviewSum').textContent=`${tx.length}건 · ${total.toLocaleString()}원`+(months.length===1?` · ${months[0]}`:'');document.getElementById('expenseReviewRows').innerHTML=tx.map((t,i)=>expRowHtml(t,i,'review')).join('');card.scrollIntoView({behavior:'smooth',block:'nearest'});}
+function learnRule(desc,cat){const key=(desc||'').toString().split(' ')[0];if(key&&key.length>=2)DATA.expenseRules[key]=cat;}
+function chgReviewCat(i,v){if(PARSED&&PARSED[i]){PARSED[i].category=v;learnRule(PARSED[i].desc,v);}}
+function chgSavedCat(id,v){const e=(DATA.expenses||[]).find(x=>x.id===id);if(e){e.category=v;learnRule(e.desc,v);save();renderExpense();}}
+function delExpense(id){DATA.expenses=(DATA.expenses||[]).filter(x=>x.id!==id);save();renderExpense();}
+function cancelParsedExpenses(){PARSED=null;document.getElementById('expenseReview').style.display='none';document.getElementById('expenseParseMsg').textContent='';}
+function saveParsedExpenses(){if(!PARSED||!PARSED.length)return;const seen=new Set((DATA.expenses||[]).map(e=>e.date+'|'+e.desc+'|'+e.amount));let added=0;const bm=new Set();PARSED.forEach(t=>{const k=t.date+'|'+t.desc+'|'+t.amount;if(seen.has(k))return;seen.add(k);DATA.expenses.push(t);bm.add(t.month);added++;});save();PARSED=null;document.getElementById('expenseReview').style.display='none';const sel=document.getElementById('expenseMonth');const latest=[...bm].sort().reverse()[0];renderExpense();if(latest){sel.value=latest;renderExpense();}toast(added>0?added+'건을 저장했어요 ✓':'이미 저장된 내역이에요');}
+function catBars(el,data,total){data=data.filter(d=>d.v>0);el.innerHTML=data.length?data.map(d=>{const pct=total>0?Math.max(0,Math.round(d.v/total*100)):0;return `<div style="margin:9px 0"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px"><span>${ECAT_ICON[d.n]||''} ${d.n}</span><span style="color:var(--ink-2);font-weight:600">${d.v.toLocaleString()}원 · ${pct}%</span></div><div style="height:8px;background:var(--surface-2);border-radius:6px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${d.c}"></div></div></div>`;}).join(''):'<div class="hint" style="padding:20px 0;text-align:center">내역을 올리면 여기 표시돼요</div>';}
+function renderExpense(){
+  const sel=document.getElementById('expenseMonth');if(!sel)return;
+  const exps=DATA.expenses||[];const months=[...new Set(exps.map(e=>e.month))].sort().reverse();const prev=sel.value;
+  sel.innerHTML=months.length?months.map(m=>{const p=m.split('-');return `<option value="${m}">${p[0]}년 ${+p[1]}월</option>`;}).join(''):'<option value="">내역 없음</option>';
+  if(months.length){sel.value=months.includes(prev)?prev:months[0];}
+  const cur=sel.value;const list=exps.filter(e=>e.month===cur);const total=list.reduce((s,e)=>s+e.amount,0);
+  const idx=months.indexOf(cur);const pm=idx>=0&&idx<months.length-1?months[idx+1]:null;const pt=pm?exps.filter(e=>e.month===pm).reduce((s,e)=>s+e.amount,0):0;const diff=pt?Math.round((total-pt)/pt*100):0;
+  const byCat={};list.forEach(e=>{byCat[e.category]=(byCat[e.category]||0)+e.amount;});let topC=null,tv=-1;for(const k in byCat)if(byCat[k]>tv){tv=byCat[k];topC=k;}
+  document.getElementById('expenseKpi').innerHTML=`
+    <div class="kpi"><div class="glow"></div><div class="label">💳 이번 달 지출</div><div class="val">${Math.round(total/10000).toLocaleString()}<small>만원</small></div><div class="sub2">${total.toLocaleString()}원 · ${list.length}건</div></div>
+    <div class="kpi"><div class="glow" style="background:var(--s2)"></div><div class="label">📊 지난달 대비</div><div class="val">${pm?(diff>0?'+':'')+diff+'%':'—'}</div><div class="sub2">${pm?(pm.split('-')[0]+'년 '+ (+pm.split('-')[1])+'월 대비'):'비교할 달 없음'}</div></div>
+    <div class="kpi"><div class="glow" style="background:var(--s3)"></div><div class="label">최다 지출</div><div class="val" style="font-size:17px">${topC?ECAT_ICON[topC]+' '+topC:'—'}</div><div class="sub2">${topC?byCat[topC].toLocaleString()+'원':'-'}</div></div>`;
+  const data=Object.keys(byCat).map(k=>({n:k,v:byCat[k],c:cssv(PAL[ECATS.indexOf(k)%PAL.length])})).sort((a,b)=>b.v-a.v);
+  catBars(document.getElementById('expenseBars'),data,total);
+  const el=document.getElementById('expenseList');el.innerHTML=list.length?list.slice().sort((a,b)=>a.date<b.date?1:-1).map(t=>expRowHtml(t,0,'saved')).join(''):'<div class="empty" style="padding:30px 10px"><div class="big">🧾</div><div class="d">위에서 카드·은행 엑셀을 올려보세요</div></div>';
+}
+document.getElementById('expenseFile').addEventListener('change',e=>{const f=e.target.files[0];if(f)handleExpenseFile(f);e.target.value='';});
 function exportData(){
   const blob=new Blob([JSON.stringify(DATA,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='FamilyCFO-백업.json';a.click();toast('백업 파일을 내려받았어요');
@@ -770,7 +880,7 @@ function loadSample(){
 }
 
 /* ============ NAV / THEME ============ */
-const titles={dash:['대시보드','우리 가족 재무 현황 한눈에 보기'],family:['가족','구성원별 소득·정보 관리'],assets:['자산·부채','가진 것과 갚을 것을 함께'],invest:['투자','포트폴리오와 배당 관리'],insure:['보험','가족 보험 정리'],future:['미래 시뮬레이션','조건을 바꿔 미래를 설계'],settings:['설정·백업','기본 설정과 데이터 보관']};
+const titles={dash:['대시보드','우리 가족 재무 현황 한눈에 보기'],family:['가족','구성원별 소득·정보 관리'],assets:['자산·부채','가진 것과 갚을 것을 함께'],invest:['투자','포트폴리오와 배당 관리'],insure:['보험','가족 보험 정리'],expense:['월 지출','매달 카드·통장 내역 자동 정리'],future:['미래 시뮬레이션','조건을 바꿔 미래를 설계'],settings:['설정·백업','기본 설정과 데이터 보관']};
 document.getElementById('nav').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
   document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
   const v=b.dataset.v;document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));document.getElementById('view-'+v).classList.add('active');
