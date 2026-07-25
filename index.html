@@ -50,6 +50,16 @@ input,select{font-family:inherit}
 .hamburger:hover{background:var(--surface-2)}
 .backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:50}
 .backdrop.show{display:block}
+.lockscreen{position:fixed;inset:0;z-index:100;background:var(--page);display:flex;align-items:center;justify-content:center;padding:20px}
+.lockscreen.hidden{display:none}
+.lockbox{background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:34px 26px;max-width:340px;width:100%;text-align:center}
+.lockbox .lk{font-size:42px}
+.lockbox h2{font-size:17px;font-weight:800;margin-top:10px}
+.lockbox .desc{font-size:12.5px;color:var(--ink-3);margin-top:6px}
+.lockbox input{width:100%;margin-top:20px;border:1px solid var(--line-strong);background:var(--surface-2);border-radius:12px;padding:13px 14px;font-size:17px;text-align:center;letter-spacing:4px;color:var(--ink);outline:none}
+.lockbox input:focus{border-color:var(--brand)}
+.lockbox button{width:100%;margin-top:12px;background:var(--brand);color:#fff;font-weight:700;padding:13px;border-radius:12px;font-size:14.5px}
+.lockbox .err{color:var(--danger);font-size:12px;margin-top:12px;display:none}
 /* main */
 .main{flex:1;min-width:0}
 .topbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--page) 82%,transparent);backdrop-filter:saturate(180%) blur(12px);border-bottom:1px solid var(--line);padding:15px 30px;display:flex;align-items:center;justify-content:space-between;gap:16px}
@@ -159,6 +169,16 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
 </style>
 </head>
 <body>
+<div class="lockscreen" id="lockscreen">
+  <div class="lockbox">
+    <div class="lk">🔒</div>
+    <h2>가족 암호를 입력하세요</h2>
+    <div class="desc">우리 가족만 볼 수 있는 가계부예요</div>
+    <input type="password" id="lockInput" inputmode="numeric" placeholder="암호" autocomplete="off">
+    <button onclick="tryUnlock()">열기</button>
+    <div class="err" id="lockErr">암호가 맞지 않아요. 다시 입력해 주세요.</div>
+  </div>
+</div>
 <div class="backdrop" id="navBackdrop"></div>
 <div class="app">
   <aside class="sidebar">
@@ -434,8 +454,8 @@ function updateCloudUI(){
 initFirebase();
 
 /* ============ SCHEMAS ============ */
-const CATS=['부동산','예금·적금','투자','연금','자동차','현금','기타'];
-const CAT_ICON={'부동산':'🏠','예금·적금':'🏦','투자':'📈','연금':'👛','자동차':'🚗','현금':'💵','기타':'📦'};
+const CATS=['부동산','예금·적금','투자','연금','공제회','자동차','현금','기타'];
+const CAT_ICON={'부동산':'🏠','예금·적금':'🏦','투자':'📈','연금':'👛','공제회':'🏫','자동차':'🚗','현금':'💵','기타':'📦'};
 const schemas={
   members:{title:'가족 구성원',icon:'👤',fields:[
     {k:'name',label:'이름',type:'text',ph:'예: 김지연'},
@@ -527,7 +547,8 @@ function hideTip(){tip.style.opacity=0;}
 /* ============ CALC ============ */
 function totalAssets(){return DATA.assets.reduce((s,a)=>s+(+a.amount||0),0);}
 function totalDebt(){return DATA.debts.reduce((s,a)=>s+(+a.balance||0),0);}
-function netWorth(){return totalAssets()-totalDebt();}
+function grandAssets(){return totalAssets()+investValue();}
+function netWorth(){return grandAssets()-totalDebt();}
 function hhIncome(){return DATA.members.reduce((s,m)=>s+(+m.income||0),0);}
 function yearDividend(){return DATA.investments.reduce((s,i)=>s+(+i.dividend||0),0);}
 function investValue(){return DATA.investments.reduce((s,i)=>s+(+i.amount||0),0);}
@@ -576,10 +597,10 @@ function rowHtml(coll,id,icon,main,sub,amt,amtSub){
 function emptyHtml(txt,onclick){return `<div class="empty"><div class="big">➕</div><div class="t">아직 없어요</div><div class="d">${txt}</div><button class="btn sm" style="margin-top:12px" onclick="${onclick}">추가하기</button></div>`;}
 
 function renderKPIs(){
-  const ta=totalAssets(),nw=netWorth(),inc=hhIncome(),exp=+DATA.settings.expense||0,div=yearDividend();
+  const ta=totalAssets(),ga=grandAssets(),nw=netWorth(),inc=hhIncome(),exp=+DATA.settings.expense||0,div=yearDividend();
   const surplus=inc-exp;
   document.getElementById('kpiRow').innerHTML=`
-    <div class="kpi"><div class="glow"></div><div class="label">💰 총자산</div><div class="val">${eok(ta)}</div><div class="sub2">자산 ${DATA.assets.length}건 합계</div></div>
+    <div class="kpi"><div class="glow"></div><div class="label">💰 총자산</div><div class="val">${eok(ga)}</div><div class="sub2">자산·주식 합계</div></div>
     <div class="kpi"><div class="glow" style="background:var(--s3)"></div><div class="label">📊 순자산</div><div class="val">${eok(nw)}</div><div class="sub2">부채 ${won(totalDebt())}만원 차감</div></div>
     <div class="kpi"><div class="glow" style="background:var(--s2)"></div><div class="label">💵 월 저축여력</div><div class="val">${won(surplus)}<small>만원</small></div><div class="sub2">소득 ${won(inc)} − 지출 ${won(exp)}</div></div>
     <div class="kpi"><div class="glow" style="background:var(--s7)"></div><div class="label">🪙 월 배당</div><div class="val">${(div/12).toFixed(1)}<small>만원</small></div><div class="sub2">연 ${won(div)}만원 예상</div></div>`;
@@ -590,7 +611,7 @@ function assetByCat(){
 }
 function renderDash(){
   renderKPIs();
-  const ac=assetByCat(),ta=totalAssets();
+  const ac=assetByCat(),iv=investValue();if(iv>0)ac.push({n:'주식·투자',v:iv,c:cssv(PAL[CATS.indexOf('투자')%PAL.length])});ac.sort((a,b)=>b.v-a.v);const ta=totalAssets()+iv;
   donut(document.getElementById('assetDonut'),ac,ta);
   legend(document.getElementById('assetLegend'),ac,ta);
   // trend: synthesize 12mo approaching current net worth
@@ -759,6 +780,11 @@ function openNav(){_sb.classList.add('open');_bd.classList.add('show');}
 function closeNav(){_sb.classList.remove('open');_bd.classList.remove('show');}
 document.getElementById('hamburger').addEventListener('click',openNav);
 _bd.addEventListener('click',closeNav);
+/* ===== 가족 암호 잠금 ===== */
+const LOCK_HASH='b518ea2c';
+function _lh(s){let h=5381;s='fcfo::'+s;for(let i=0;i<s.length;i++)h=((h*33)^s.charCodeAt(i))>>>0;return h.toString(16);}
+function tryUnlock(){const el=document.getElementById('lockInput');if(_lh(el.value)===LOCK_HASH){localStorage.setItem('familyCFO_unlocked','1');document.getElementById('lockscreen').classList.add('hidden');}else{document.getElementById('lockErr').style.display='block';el.value='';el.focus();}}
+(function(){const ls=document.getElementById('lockscreen');if(!ls)return;if(localStorage.getItem('familyCFO_unlocked')==='1'){ls.classList.add('hidden');}else{const el=document.getElementById('lockInput');if(el){el.focus();el.addEventListener('keydown',e=>{if(e.key==='Enter')tryUnlock();});}}})();
 document.getElementById('themeToggle').addEventListener('click',()=>{const d=document.documentElement.getAttribute('data-theme')==='dark';document.documentElement.setAttribute('data-theme',d?'light':'dark');document.getElementById('themeIc').textContent=d?'🌙':'☀️';document.getElementById('themeTxt').textContent=d?'다크 모드':'라이트 모드';renderAll();});
 
 /* ============ INIT ============ */
