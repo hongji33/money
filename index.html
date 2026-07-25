@@ -278,9 +278,15 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
         <div class="card">
           <h3 style="margin-bottom:6px">⚙️ 조건 설정</h3>
           <div class="control"><div class="lab">매달 추가 저축·투자 <span class="v" id="valExtra">+30만원</span></div><input type="range" id="sExtra" min="0" max="200" step="10" value="30"></div>
-          <div class="control"><div class="lab">연 투자수익률 가정 <span class="v" id="valRate">5%</span></div><input type="range" id="sRate" min="2" max="9" step="1" value="5"></div>
           <div class="control"><div class="lab">계산 기간 <span class="v" id="valYears">20년</span></div><input type="range" id="sYears" min="5" max="35" step="5" value="20"></div>
+          <div class="control"><div class="lab">주식 시장 전망 <span class="v" id="valScen">보통</span></div>
+            <select id="sScenario" style="width:100%;margin-top:6px;border:1px solid var(--line-strong);background:var(--surface-2);border-radius:10px;padding:9px 10px;font-size:13px;color:var(--ink)">
+              <option value="신중">신중하게 (낮게 잡기)</option>
+              <option value="보통" selected>보통 (장기 평균)</option>
+              <option value="낙관">낙관적으로 (높게 잡기)</option>
+            </select></div>
           <div class="control"><div class="toggle">배당·이자 재투자 <div class="sw-t on" id="tReinvest"></div></div></div>
+          <div id="simAssume" class="hint" style="margin-top:12px;line-height:1.6"></div>
         </div>
         <div class="card"><div class="hd-row"><h3>📈 순자산 예측</h3><span class="hint">단위: 억원</span></div><div id="simChart"></div><div class="ms-row" id="milestones"></div></div>
       </div>
@@ -579,6 +585,20 @@ function netWorth(){return grandAssets()-totalDebt();}
 function hhIncome(){return DATA.members.reduce((s,m)=>s+(+m.income||0),0);}
 function yearDividend(){return DATA.investments.reduce((s,i)=>s+(+i.dividend||0),0);}
 function investValue(){return DATA.investments.reduce((s,i)=>s+(+i.amount||0),0);}
+function fundRate(name,region){
+  const n=(name||'').toString().toLowerCase();const has=(...ks)=>ks.some(k=>n.includes(k));
+  if(has('나스닥','nasdaq','qqq'))return 0.12;
+  if(has('s&p','snp','에스앤피','spy','voo','ivv','s&p500','sp500'))return 0.10;
+  if(has('다우','dow','dia'))return 0.08;
+  if(has('반도체','soxx','필라델피아','테크','기술주'))return 0.11;
+  if(has('전세계','올컨트리','vt','선진국','msci','글로벌'))return 0.07;
+  if(has('코스피','kospi','kodex 200','tiger 200','국내지수'))return 0.06;
+  if(has('배당','고배당','리츠','reit','dividend'))return 0.06;
+  if(has('채권','bond','국채','회사채','tlt','ief'))return 0.04;
+  if(has('금 ','gold','금현물','금etf'))return 0.05;
+  const map={'미국':0.08,'국내':0.055,'기타':0.06};return map[region]||0.06;
+}
+function expectedStockRate(){let tot=0,acc=0;(DATA.investments||[]).forEach(i=>{const v=+i.amount||0;if(v>0){tot+=v;acc+=v*fundRate(i.name,i.region);}});return tot>0?acc/tot:0.08;}
 
 /* ============ DONUT / LINE ============ */
 function donut(el,data,total,size=180){
@@ -694,25 +714,30 @@ function renderInsure(){
 }
 /* ---- simulation ---- */
 function drawSim(){
-  const extra=+document.getElementById('sExtra').value,rate=+document.getElementById('sRate').value/100,years=+document.getElementById('sYears').value,reinvest=document.getElementById('tReinvest').classList.contains('on');
-  let net=netWorth();if(net<=0)net=1000;
+  const extra=+document.getElementById('sExtra').value,years=+document.getElementById('sYears').value,reinvest=document.getElementById('tReinvest').classList.contains('on');
+  const scen=(document.getElementById('sScenario')||{}).value||'보통';const adj=scen==='신중'?-0.02:scen==='낙관'?0.02:0;
+  const HOME=0.02,DEP=0.03,GONGJE=0.049,PEN=0.03;const stockRate=Math.max(0.01,expectedStockRate()+adj);
+  const catSum=c=>(DATA.assets||[]).filter(a=>a.category===c).reduce((s,a)=>s+(+a.amount||0),0);
+  let home=catSum('부동산'),stocks=investValue()+catSum('투자'),gongje=catSum('공제회'),dep=catSum('예금·적금')+catSum('현금'),pen=catSum('연금'),other=catSum('자동차')+catSum('기타');
+  let debt=totalDebt();const annualRepay=(DATA.debts||[]).reduce((s,d)=>s+(+d.monthly||0),0)*12;
+  if(home+stocks+gongje+dep+pen+other<=0)stocks=Math.max(netWorth(),1000);
   const baseSurplus=Math.max(hhIncome()-(+DATA.settings.expense||0),0)*12;
-  const nowY=2026;const yr={};yr[nowY]=Math.round(net);
-  for(let y=1;y<=years;y++){const inv=net*0.45;let g=inv*rate;if(!reinvest)g*=0.82;net+=baseSurplus+extra*12+g;yr[nowY+y]=Math.round(net);}
+  const gAdj=reinvest?1:0.85;const nowY=2026;const yr={};
+  yr[nowY]=Math.round(home+stocks+gongje+dep+pen+other-debt);
+  for(let y=1;y<=years;y++){home*=(1+HOME);stocks=stocks*(1+stockRate*gAdj)+baseSurplus+extra*12;gongje*=(1+GONGJE);dep*=(1+DEP);pen*=(1+PEN);debt=Math.max(0,debt-annualRepay);yr[nowY+y]=Math.round(home+stocks+gongje+dep+pen+other-debt);}
   const pts=[];for(let y=0;y<=years;y++){if(y%Math.max(1,Math.round(years/12))===0||y===years)pts.push({lbl:`'${String(nowY+y).slice(2)}`,y:yr[nowY+y]});}
   lineChart(document.getElementById('simChart'),pts,{unit:'억',fmt:v=>(v/10000).toFixed(1),color:cssv('--s7')});
-  const picks=[Math.round(years/2),years].filter((v,i,a)=>a.indexOf(v)===i);
-  const msEl=document.getElementById('milestones');
-  const marks=[{y:5},{y:Math.round(years/2)},{y:years}].filter((m,i,a)=>a.findIndex(x=>x.y===m.y)===i&&m.y<=years);
-  msEl.innerHTML=marks.map(m=>`<div class="ms"><div class="age">${m.y}년 후</div><div class="amt">${(yr[nowY+m.y]/10000).toFixed(1)}억</div><div class="yr">${nowY+m.y}년</div></div>`).join('');
+  const marks=[{y:5},{y:Math.round(years/2)},{y:years}].filter((m,i,a)=>a.findIndex(x=>x.y===m.y)===i&&m.y<=years&&m.y>0);
+  document.getElementById('milestones').innerHTML=marks.map(m=>`<div class="ms"><div class="age">${m.y}년 후</div><div class="amt">${(yr[nowY+m.y]/10000).toFixed(1)}억</div><div class="yr">${nowY+m.y}년</div></div>`).join('');
   const fin=yr[nowY+years];
-  document.getElementById('simNarrative').innerHTML=`지금 순자산 <b>${(netWorth()/10000).toFixed(1)}억원</b>에서 시작해, 매달 ${extra}만원을 더 저축·투자하고 연 ${document.getElementById('sRate').value}% 수익을 가정하면 <b>${years}년 뒤 약 ${(fin/10000).toFixed(1)}억원</b>이 예상돼요. 슬라이더를 움직여 우리 가족에게 맞는 계획을 찾아보세요. 🙂`;
+  document.getElementById('simAssume').innerHTML=`📌 가정: 실거주 집 연 2% · 주식 연 <b>${(stockRate*100).toFixed(1)}%</b>(전망:${scen}) · 공제회 연 4.9% · 예금·연금 연 3% · 자동차·기타 성장 없음`;
+  document.getElementById('simNarrative').innerHTML=`지금 순자산 <b>${(yr[nowY]/10000).toFixed(1)}억원</b>에서 시작해요. 실거주 집에는 투자수익률을 적용하지 않고 <b>연 2%</b>만, 주식은 보유 종목 기준 <b>연 ${(stockRate*100).toFixed(1)}%</b>(‘${scen}’ 전망), 교직원공제회는 실제 이율인 <b>연 4.9%</b>로 잡았어요. 매달 ${extra}만원을 더 저축·투자한다고 가정하면 <b>${years}년 뒤 약 ${(fin/10000).toFixed(1)}억원</b>이 예상돼요. (예상치일 뿐 보장은 아니에요.) 🙂`;
 }
-['sExtra','sRate','sYears'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{
+['sExtra','sYears'].forEach(id=>document.getElementById(id).addEventListener('input',()=>{
   document.getElementById('valExtra').textContent='+'+document.getElementById('sExtra').value+'만원';
-  document.getElementById('valRate').textContent=document.getElementById('sRate').value+'%';
   document.getElementById('valYears').textContent=document.getElementById('sYears').value+'년';
   drawSim();}));
+document.getElementById('sScenario').addEventListener('change',function(){document.getElementById('valScen').textContent=this.value;drawSim();});
 document.getElementById('tReinvest').addEventListener('click',function(){this.classList.toggle('on');drawSim();});
 
 function renderAll(){renderDash();renderFamily();renderAssets();renderInvest();renderInsure();drawSim();document.getElementById('setExpense').value=DATA.settings.expense||'';try{renderExpense();}catch(e){}try{updateCloudUI();}catch(e){}}
