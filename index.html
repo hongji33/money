@@ -863,7 +863,7 @@ document.getElementById('expenseFile').addEventListener('change',e=>{const f=e.t
 
 /* ================= AI 도우미 (Gemini) ================= */
 const GKEY='familyCFO_gemkey';
-const AI_MODELS=['gemini-2.5-flash','gemini-2.0-flash','gemini-2.0-flash-lite','gemini-1.5-flash'];
+const AI_MODELS=['gemini-2.5-flash','gemini-2.0-flash','gemini-2.5-flash-lite','gemini-2.0-flash-lite','gemini-1.5-flash','gemini-1.5-flash-8b'];
 const AI_EXAMPLES=['이번 달 지출 어땠어?','저축을 더 늘리려면?','내 포트폴리오 균형 어때?','부채부터 갚는 게 나을까?'];
 function renderAiStatus(){
   const st=document.getElementById('aiKeyState');if(!st)return;
@@ -892,12 +892,13 @@ async function callGemini(key,prompt){
     let data;try{data=await res.json();}catch(e){data={};}
     if(!res.ok){
       const msg=(data.error&&data.error.message)||('HTTP '+res.status);
-      if(res.status===404||/not found|not supported|unsupported|해당 모델/i.test(msg)){lastErr=msg;continue;}
+      if(res.status===404||res.status===429||/not found|not supported|unsupported|quota|exceeded|RESOURCE_EXHAUSTED/i.test(msg)){lastErr=msg;continue;}
       throw new Error(msg);
     }
     const parts=data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts;
     return (parts?parts.map(p=>p.text||'').join(''):'')||'(답변이 비어 있어요)';
   }
+  if(/quota|exceeded|limit: 0|RESOURCE_EXHAUSTED/i.test(lastErr)) throw new Error('구글이 이 키에 무료 사용량을 0으로 막아둔 상태예요(계정 미검증). → 해결: 구글 클라우드에서 결제(카드) 연결 시 풀려요(무료 한도 안이면 요금 없음). 자세한 방법은 대화창을 참고하세요.');
   throw new Error('쓸 수 있는 모델을 못 찾았어요. 마지막 응답: '+(lastErr||'없음'));
 }
 async function askAi(){
